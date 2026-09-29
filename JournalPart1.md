@@ -3,7 +3,9 @@
 
 You cannot wake up one day and decide that I want to analyse data.
 You need to have a set of questions that you want to answer and a data analysis operation will give you evidence backed evidence .
-           **CASE STUDY**
+          
+           
+**CASE STUDY**
 
            
 I went to analyse my MPESA statement for two semesters .
