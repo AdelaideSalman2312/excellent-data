@@ -7,12 +7,12 @@ I am using the 30 days Python cahllenge repo and then my customized Python Curri
 
 **1. Description**
 
-I am learning Python because it is the backbone of the Retrieval - Augmented Generation(RAG) - the pattern where a Large Language Model (LLM) retrieves facts from an external knowledge base before generating a response . It is specifically interesting to me in my Artificial intelligence understanding because it grounds the LLM on my/ your specifi documents , prevents hallucinations , and eliminates the need to fine-tune the model on private or dynamic data .
+I am learning Python because it is the backbone of the Retrieval - Augmented Generation(RAG) - the pattern where a Large Language Model (LLM) retrieves facts from an external knowledge base before generating a response . It is specifically interesting to me in my Artificial intelligence understanding because it grounds the LLM on my/ your specific documents , prevents hallucinations , and eliminates the need to fine-tune the model on private or dynamic data .
 
 
 I am building towards prompt-engineering , and red-teaming work  - and because Automate the Boring Stuff started as practical scripting before I needed it for Programming for Machine Learning this semester.
 
-I am learning by doing the smallest working version first hen comparing five attempts side by side — this repo reflects that, so expect rough early entries next to more polished later ones, on purpose.
+I am learning by doing the smallest working version first then comparing five attempts side by side — this repo reflects that, so expect rough early entries next to more polished later ones, on purpose.
 
 
 **2. My Python Curriculum**
