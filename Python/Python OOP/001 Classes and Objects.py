@@ -1,3 +1,4 @@
+"Day 1 - Sunday 25th October"
 "Classes -A class is a blueprint used to create objects that share common properties and behavior."
 "An object is an instance of a class. It represents a specific entity created from the class template"
 " Let me explain in Java - __init__ is your constructor and self is this but the main difference is that python makes you write self out explicitly every time "
@@ -46,3 +47,11 @@ assert limiter.allow() is True
 print("All tests passed")
 
 "assert crashes loudly if something is wrong. If you see “All tests passed”, it works."
+
+
+a = RateLimiter(3, 1)
+b = RateLimiter(3, 1)
+
+print(a.allow(), a.allow(), a.allow(), a.allow())  # True True True False
+print(b.allow())                                   # ?
+print(a.count, b.count)
