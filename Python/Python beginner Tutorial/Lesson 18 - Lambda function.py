@@ -1,0 +1,1 @@
+add + `lambda  x : x + 1`
