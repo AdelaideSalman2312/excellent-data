@@ -1,1 +1,0 @@
-" A method is the same thing as a function, except it is “called on” a value "
