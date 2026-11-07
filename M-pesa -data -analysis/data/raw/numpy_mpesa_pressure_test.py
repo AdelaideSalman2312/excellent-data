@@ -1,7 +1,38 @@
 """
 numpy_mpesa_pressure_test.py - 10 numpy questions on YOUR M-PESA statement.
 
+HOW IT WORKS
+  Each question is a function below that says `raise NotImplementedError`.
+  Replace that line with your numpy code. Run the file any time:
+      python numpy_mpesa_pressure_test.py
+  It prints TODO / PASS / FAIL / ERROR for each question, checked against
+  independent reference answers (and your Dashboard totals).
 
+SETUP
+  1. pip install numpy pandas
+  2. In LibreOffice, save your statement as CSV (File > Save As > Text CSV)
+     and name it mpesa_statement.csv, in the same folder as this file.
+  3. Check the COLUMN NAMES in the SETTINGS section match your file's Row 1.
+
+PRIVACY
+  Your statement has real names and numbers. Keep the CSV out of GitHub
+  (.gitignore it) and don't paste its rows into public posts.
+
+HOW YOU'LL KNOW IT BROKE
+  - FileNotFoundError  -> CSV not in this folder or CSV_PATH wrong.
+  - KeyError "Columns not found" -> edit COL below to match your Row 1 text.
+                          (The separator - comma, tab or semicolon - is detected
+                          automatically, so a tab-separated file is fine.)
+  - ParserError        -> junk email lines are inside the CSV; set SKIP_ROWS
+                          to the number of junk lines at the top, or delete
+                          them in LibreOffice and re-save.
+  - Q1 off by exactly the junk amount -> the loader prints how much money sat
+                          on rows it dropped; that's your answer.
+
+THE TRAPS (on purpose)
+  Blank cells are loaded as NaN, exactly like real life. np.sum, np.mean,
+  np.argsort and np.bincount all behave badly with NaN. Part of the test is
+  noticing that.
 
 THE QUESTION BANK
   Q1  Totals and net                      (Excel: SUM)
@@ -33,7 +64,8 @@ COL = {
 # Your Dashboard numbers, after cleaning the junk rows. Set to None to skip.
 EXPECTED = {"money_in": 165120.13, "money_out": 161561.22}
 TOL = 0.01
-DAY_FIRST = True   # tie-breaker only: used if every date is ambiguous (day <= 12)
+DAY_FIRST = False  # for slash dates like 01/11/26. False = month/day (11 Jan), True = day/month (1 Nov).
+                   # Your file: the row after "01/11/26 07:52 PM" is "2026-01-11 19:53", so it is month/day.
 
 # Same order as your final nested IF. First match wins.
 RULES = [
@@ -59,6 +91,29 @@ def _to_number(series):
     return pd.to_numeric(cleaned, errors="coerce")
 
 
+def _date_formats():
+    """Every date style we try. ISO first (never ambiguous), then slash styles."""
+    iso = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
+    mdy = ["%m/%d/%Y %I:%M:%S %p", "%m/%d/%y %I:%M %p", "%m/%d/%y %I:%M:%S %p",
+           "%m/%d/%Y %I:%M %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%y %H:%M"]
+    dmy = [f.replace("%m/%d", "%d/%m") for f in mdy]
+    return iso + (dmy + mdy if DAY_FIRST else mdy + dmy)
+
+
+def _parse_dates(raw_time):
+    """Parse each row with the first format that works. Returns (dates, {format: rows})."""
+    parsed = pd.Series(pd.NaT, index=raw_time.index, dtype="datetime64[ns]")
+    used = {}
+    for fmt in _date_formats():
+        before = int(parsed.notna().sum())
+        attempt = pd.to_datetime(raw_time, format=fmt, errors="coerce")
+        parsed = parsed.fillna(attempt)
+        gained = int(parsed.notna().sum()) - before
+        if gained:
+            used[fmt] = gained
+    return parsed, used
+
+
 def _detect_sep(path):
     """Look at the header line and pick the separator it uses: comma, tab or semicolon."""
     with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
@@ -79,17 +134,8 @@ def load():
     if missing:
         raise KeyError(f"Columns not found: {missing}. Your file has: {list(df.columns)}")
 
-    raw_time = df[COL["time"]].astype(str).str.strip()
-    day_first_formats = ["%d/%m/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S %p"]
-    formats = (day_first_formats if DAY_FIRST else day_first_formats[::-1]) + [
-        "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S",
-    ]
-    best, best_rate = None, -1.0
-    for fmt in formats:
-        parsed = pd.to_datetime(raw_time, format=fmt, errors="coerce")
-        rate = parsed.notna().mean()
-        if rate > best_rate:          # ties keep the earlier (preferred) format
-            best, best_rate = parsed, rate
+    raw_time = df[COL["time"]].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+    best, used = _parse_dates(raw_time)
 
     paid = _to_number(df[COL["paid_in"]])
     out = _to_number(df[COL["withdrawn"]]).abs()   # some exports show withdrawals as negatives
@@ -118,8 +164,17 @@ def load():
     print("=" * 70)
     print(f"Loaded {d['n']:,} transactions. Dropped {int(dropped.sum())} rows with no valid date "
           f"(money sitting on them: {money_on_dropped:,.2f}).")
-    print(f"Date range: {dates.min()} to {dates.max()}   <- should be Jan to May 2026. "
-          f"If not, flip DAY_FIRST.")
+    print(f"Date range: {dates.min()} to {dates.max()}")
+    print("Date styles found: " + ", ".join(f"{f} -> {n} rows" for f, n in used.items()))
+    months, counts = np.unique(dates.astype("datetime64[M]"), return_counts=True)
+    print("Transactions per month: " + ", ".join(f"{m}: {c}" for m, c in zip(months, counts)))
+    print("(If these months look scrambled - e.g. a 'month' you know isn't in your "
+          "statement - flip DAY_FIRST.)")
+    if dropped.any():
+        shown = pd.DataFrame({"date text": raw_time[dropped], "paid_in": paid[dropped],
+                              "withdrawn": out[dropped]}).head(10)
+        print("Rows dropped (no valid date):")
+        print(shown.to_string())
     print("=" * 70)
     return d
 
@@ -145,29 +200,38 @@ def reference_category(details):
 # balance, n). d["category"] is also provided for Q6.
 
 def q1_totals(d):
-    """Return (money_in, money_out, net).
-    TRAP: blank cells are NaN. What does np.sum do with NaN? Find the safe one."""
-    raise NotImplementedError
+    money_in = np.nansum(d["paid_in"])
+    money_out = np.nansum(d["withdrawn"])
+    return money_in, money_out, money_in - money_out
 
 
 def q2_counts(d):
     """Return (number_of_money_in_rows, number_of_money_out_rows).
     A money-in row has Paid In > 0; a money-out row has Withdrawn > 0.
     Hint: a comparison gives a True/False array; True counts as 1."""
-    raise NotImplementedError
+    n_in = np.sum(d["paid_in"]>0)
+    n_out = np.sum(d["withdrawn"]>0)
+    return int(n_in), int(n_out)
 
 
 def q3_top5(d):
     """Return the 5 biggest outflow amounts, largest first, as an array.
     TRAP: np.sort / np.argsort put NaN at the END. A naive 'last 5' picks NaN."""
-    raise NotImplementedError
+    real = d["withdrawn"][d["withdrawn"]>0]
+    return np.sort(real)[::-1][:5]
 
 
 def q4_typical(d):
     """Return (mean_outflow, median_outflow, top10_share_percent).
     Use only rows where Withdrawn > 0. top10_share = the 10 biggest outflows
     as a % of total outflow. Which is more 'typical': mean or median? Why?"""
-    raise NotImplementedError
+    w = d["withdrawn"]
+    out = w[w > 0]
+    mean_out = out.mean()
+    median_out = np.median(out)
+    top10 = np.sort(out)[::-1][:10].sum()
+    share = top10 / out.sum() * 100
+    return mean_out, median_out, share
 
 
 def q5_categories(d):
@@ -175,27 +239,46 @@ def q5_categories(d):
     This is your nested IF + SEARCH, vectorised. Hint: np.char.lower,
     np.char.find(...) >= 0 for each keyword, then np.select(conditions, choices,
     default='Other')."""
-    raise NotImplementedError
+    lower = np.char.lower(d["details"])
+    conditions = [np.char.find(lower, keyword) >= 0 for keyword, category in RULES]
+    choices = [category for keyword, category in RULES]
+    return np.select(conditions, choices, default="Other")
 
 
 def q6_by_category(d):
     """Return {category: total_money_out} using d['category'].
     Excel's SUMIF. Hint: np.unique(..., return_inverse=True) then np.bincount
     with weights=. TRAP: NaN in weights makes the whole total NaN."""
-    raise NotImplementedError
+    w = np.nan_to_num(d["withdrawn"], nan=0.0)
+    totals = {}
+    for cat in np.unique(d["category"]):
+        totals[cat] = float(w[d["category"] == cat].sum())
+    return totals
 
 
 def q7_by_month(d):
     """Return {'2026-01': total_money_out, ...}.
     Hint: d['dates'].astype('datetime64[M]') turns timestamps into months."""
-    raise NotImplementedError
+    w = np.nan_to_num(d["withdrawn"], nan=0.0)
+    months = d["dates"].astype("datetime64[M]")
+    totals = {}
+    for month in np.unique(months):
+        totals[str(month)] = float(w[months == month].sum())
+    return totals
+        
 
 
 def q8_by_weekday(d):
     """Return an array of 7 totals: Monday first, Sunday last.
     Hint: d['dates'].astype('datetime64[D]').astype(int) counts days since
     1 Jan 1970, which was a THURSDAY. Use % 7 and shift so Monday = 0."""
-    raise NotImplementedError
+    w = np.nan_to_num(d["withdrawn"], nan=0.0)
+    days = d["dates"].astype("datetime64[D]").astype(int)
+    weekday = (days + 3) % 7
+    totals = []
+    for day in range(7):
+        totals.append(float(w[weekday == day].sum()))
+    return totals
 
 
 def q9_balance_breaks(d):
@@ -203,14 +286,25 @@ def q9_balance_breaks(d):
          balance[i] - balance[i-1] == paid_in[i] - withdrawn[i]   (within 0.01)
     for i = 1..n-1. Hint: np.diff. A few breaks may be real (same-second ties,
     reversals) - what would you do about a large number?"""
-    raise NotImplementedError
+    step = np.diff(d["balance"])
+    flow = (np.nan_to_num(d["paid_in"]) - np.nan_to_num(d["withdrawn"]))[1:]
+    return int(np.sum(np.abs(step - flow) > 0.01))
 
 
 def q10_stress(d):
     """Repeat the withdrawn column 1000 times (np.tile) to make ~1.2 million rows.
     Sum it with a plain Python for-loop, then with np.sum, timing both with
     time.perf_counter(). Return (loop_seconds, numpy_seconds)."""
-    raise NotImplementedError
+    big = np.tile(np.nan_to_num(d["withdrawn"], nan=0.0), 1000)
+    t0 = time.perf_counter()
+    total = 0.0
+    for x in big:
+        total += x
+    loop_s = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    np.sum(big)
+    np_s = time.perf_counter() - t0
+    return loop_s, np_s
 
 
 # =============================== CHECKS ====================================
@@ -338,3 +432,8 @@ def run_all(d, impl=None):
 
 if __name__ == "__main__":
     run_all(load())
+    
+    
+    
+
+    
